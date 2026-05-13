@@ -10,7 +10,7 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     const sponsor = await verifySponsorCode(code);
     if (!sponsor) return NextResponse.json({ error: "Invalid or inactive sponsor code." }, { status: 401 });
 
-    const attendee = await getAttendeeById(params.id);
+    const attendee = await getAttendeeById(params.id, code);
     if (!attendee) return NextResponse.json({ error: "Attendee not found." }, { status: 404 });
 
     return NextResponse.json(attendee);

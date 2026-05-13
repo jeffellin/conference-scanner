@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import jsQR from "jsqr";
 
 type Sponsor = { code: string; company: string; tier: string };
-type Attendee = { id: string; name: string; company: string; email: string; phone: string };
+type Attendee = { id: string; name: string; company: string; email: string; phone: string; existing_notes: string | null; existing_scanned_at: string | null };
 type ScanResult = { attendee: Attendee; saved: boolean };
 
 export default function ScanPage() {
@@ -143,6 +143,7 @@ export default function ScanPage() {
       }
       const attendee: Attendee = await res.json();
       setResult({ attendee, saved: false });
+      if (attendee.existing_notes) setNotes(attendee.existing_notes);
     } catch {
       setError("Failed to look up attendee. Try again.");
     }
@@ -266,7 +267,12 @@ export default function ScanPage() {
                   <h2 style={{ fontSize: 20, fontWeight: 700 }}>{result.attendee.name}</h2>
                   <div style={{ color: "var(--accent2)", fontWeight: 500, marginTop: 2 }}>{result.attendee.company}</div>
                 </div>
-                {result.saved && <span className="badge badge-active">Saved</span>}
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                  {result.attendee.existing_scanned_at && !result.saved && (
+                    <span className="badge badge-inactive" style={{ whiteSpace: "nowrap" }}>Already scanned</span>
+                  )}
+                  {result.saved && <span className="badge badge-active">Saved</span>}
+                </div>
               </div>
               <div className="divider" style={{ margin: "12px 0" }} />
               <div className="stack" style={{ gap: 8 }}>
@@ -313,7 +319,7 @@ export default function ScanPage() {
 
             <div style={{ display: "flex", gap: 10 }}>
               <button className="btn btn-primary" style={{ flex: 1 }} onClick={saveLead} disabled={saving}>
-                {saving ? "Saving…" : result.saved ? "Update Notes" : "Save Lead"}
+                {saving ? "Saving…" : result.saved ? "Saved ✓" : result.attendee.existing_scanned_at ? "Update Notes" : "Save Lead"}
               </button>
               <button className="btn btn-secondary" style={{ flex: 1 }} onClick={resetScanner}>
                 Scan Next

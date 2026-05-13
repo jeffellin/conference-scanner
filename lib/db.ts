@@ -4,11 +4,16 @@ export { sql };
 
 // ── Attendees ────────────────────────────────────────────────────────────────
 
-export async function getAttendeeById(id: string) {
+export async function getAttendeeById(id: string, sponsorCode?: string) {
   const { rows } = await sql`
-    SELECT id, name, company, email, phone
-    FROM attendees
-    WHERE id = ${id}
+    SELECT
+      a.id, a.name, a.company, a.email, a.phone,
+      sl.notes AS existing_notes,
+      sl.scanned_at AS existing_scanned_at
+    FROM attendees a
+    LEFT JOIN scan_logs sl
+      ON sl.attendee_id = a.id AND sl.sponsor_code = ${sponsorCode ?? ""}
+    WHERE a.id = ${id}
   `;
   return rows[0] ?? null;
 }
