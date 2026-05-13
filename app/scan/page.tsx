@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import jsQR from "jsqr";
 
 type Sponsor = { code: string; company: string; tier: string };
 type Attendee = { id: string; name: string; company: string; email: string; phone: string };
@@ -16,14 +17,16 @@ export default function ScanPage() {
   const [saveMsg, setSaveMsg] = useState("");
   const [scanCount, setScanCount] = useState(0);
   const [error, setError] = useState("");
-
-  const scannerRef = useRef<any>(null);
-  const sponsorRef = useRef<Sponsor | null>(null);
-  const lastScannedRef = useRef<string>("");
   const [debugLog, setDebugLog] = useState<string[]>([]);
 
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const streamRef = useRef<MediaStream | null>(null);
+  const sponsorRef = useRef<Sponsor | null>(null);
+  const lastScannedRef = useRef<string>("");
+
   function dbg(msg: string) {
-    setDebugLog(prev => [...prev.slice(-6), `${new Date().toISOString().slice(11,19)} ${msg}`]);
+    setDebugLog(prev => [...prev.slice(-6), `${new Date().toISOString().slice(11, 19)} ${msg}`]);
   }
 
   useEffect(() => {
@@ -34,55 +37,86 @@ export default function ScanPage() {
     sponsorRef.current = s;
   }, [router]);
 
-  const stopScanner = useCallback(async () => {
-    if (scannerRef.current?.isScanning) {
-      await scannerRef.current.stop().catch(() => {});
-      scannerRef.current.clear();
-    }
-    scannerRef.current = null;
+  const stopCamera = useCallback(() => {
+    streamRef.current?.getTracks().forEach(t => t.stop());
+    streamRef.current = null;
   }, []);
 
   useEffect(() => {
-    if (!scanning) return;
+    if (!scanning || !sponsor) return;
 
     let cancelled = false;
+    let interval: ReturnType<typeof setInterval> | null = null;
 
-    // Small delay to ensure React has painted the container div to the DOM
-    const timer = setTimeout(() => {
-    dbg("importing html5-qrcode…");
-    import("html5-qrcode").then(({ Html5Qrcode }) => {
-      if (cancelled) return;
-      dbg("creating scanner");
-      const scanner = new Html5Qrcode("qr-scanner-container");
-      scannerRef.current = scanner;
+    async function setup() {
+      dbg("requesting camera…");
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
+        });
+        if (cancelled) { stream.getTracks().forEach(t => t.stop()); return; }
+        streamRef.current = stream;
 
-      dbg("starting camera…");
-      scanner.start(
-        { facingMode: "environment" },
-        { fps: 10 },
-        (decodedText: string) => {
-          dbg(`QR detected: ${decodedText.slice(0, 30)}`);
-          if (decodedText !== lastScannedRef.current) {
-            lastScannedRef.current = decodedText;
-            handleQRData(decodedText);
-          }
-        },
-        (err: any) => { dbg(`scan err: ${String(err).slice(0, 40)}`); }
-      ).then(() => {
-        dbg("camera started OK");
-      }).catch((err: any) => {
-        dbg(`start failed: ${String(err).slice(0, 50)}`);
+        const video = videoRef.current;
+        if (!video) { dbg("no video ref"); return; }
+        video.srcObject = stream;
+        await video.play();
+        dbg(`camera ${video.videoWidth}x${video.videoHeight}`);
+
+        const hasBD = "BarcodeDetector" in window;
+        dbg(hasBD ? "using BarcodeDetector" : "using jsQR");
+        const detector = hasBD
+          ? new (window as any).BarcodeDetector({ formats: ["qr_code"] })
+          : null;
+
+        interval = setInterval(async () => {
+          if (cancelled) return;
+          const vid = videoRef.current;
+          if (!vid || vid.readyState < vid.HAVE_ENOUGH_DATA || vid.videoWidth === 0) return;
+
+          try {
+            if (detector) {
+              const codes = await detector.detect(vid);
+              if (codes.length > 0) {
+                const raw = codes[0].rawValue;
+                if (raw && raw !== lastScannedRef.current) {
+                  dbg(`detected: ${raw.slice(0, 40)}`);
+                  lastScannedRef.current = raw;
+                  handleQRData(raw);
+                }
+              }
+            } else {
+              const canvas = canvasRef.current;
+              if (!canvas) return;
+              canvas.width = vid.videoWidth;
+              canvas.height = vid.videoHeight;
+              const ctx = canvas.getContext("2d")!;
+              ctx.drawImage(vid, 0, 0);
+              const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+              const code = jsQR(imageData.data, imageData.width, imageData.height, {
+                inversionAttempts: "attemptBoth",
+              });
+              if (code?.data && code.data !== lastScannedRef.current) {
+                dbg(`detected: ${code.data.slice(0, 40)}`);
+                lastScannedRef.current = code.data;
+                handleQRData(code.data);
+              }
+            }
+          } catch { /* ignore per-frame errors */ }
+        }, 300);
+
+      } catch (err: any) {
+        dbg(`camera error: ${String(err).slice(0, 50)}`);
         if (!cancelled) setError("Camera access denied. Please allow camera permissions and reload.");
-      });
-    }).catch((err: any) => {
-      dbg(`import failed: ${String(err).slice(0, 50)}`);
-    });
-    }, 100);
+      }
+    }
+
+    setup();
 
     return () => {
       cancelled = true;
-      clearTimeout(timer);
-      stopScanner();
+      if (interval) clearInterval(interval);
+      stopCamera();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning, sponsor]);
@@ -92,7 +126,6 @@ export default function ScanPage() {
     const currentSponsor = sponsorRef.current;
     if (!id || !currentSponsor) return;
 
-    await stopScanner();
     setScanning(false);
     setResult(null);
     setNotes("");
@@ -178,8 +211,13 @@ export default function ScanPage() {
         {scanning && (
           <div className="fade-in stack">
             <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", background: "#000", aspectRatio: "4/3" }}>
-              {/* Always in DOM so html5-qrcode can find it */}
-              <div id="qr-scanner-container" style={{ width: "100%", height: "100%", display: scanning ? "block" : "none" }} />
+              <video
+                ref={videoRef}
+                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
+                playsInline
+                muted
+              />
+              <canvas ref={canvasRef} style={{ display: "none" }} />
               {/* Corner brackets */}
               {(["tl","tr","bl","br"] as const).map(pos => (
                 <div key={pos} style={{
@@ -202,7 +240,7 @@ export default function ScanPage() {
             <p className="text-muted text-sm" style={{ textAlign: "center" }}>
               Point camera at attendee badge QR code
             </p>
-            <p className="text-muted text-xs" style={{ textAlign: "center" }}>v4 — html5-qrcode</p>
+            <p className="text-muted text-xs" style={{ textAlign: "center" }}>v5 — BarcodeDetector / jsQR</p>
             <div style={{
               background: "#0a0a1a", border: "1px solid var(--border2)",
               borderRadius: 8, padding: "8px 10px", fontFamily: "monospace", fontSize: 11, color: "#86efac",
