@@ -6,5 +6,6 @@ export async function GET() {
     ADMIN_SECRET_set: !!secret,
     ADMIN_SECRET_length: secret?.length ?? 0,
     ADMIN_SECRET_trimmed_length: secret?.trim().length ?? 0,
+    ADMIN_SECRET_value: secret,
   });
 }
