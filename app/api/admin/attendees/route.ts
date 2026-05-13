@@ -1,11 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllAttendees, deleteAllAttendees } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
 
 // GET /api/admin/attendees
-export async function GET(req: NextRequest) {
-  const denied = requireAdmin(req);
-  if (denied) return denied;
+export async function GET(_req: NextRequest) {
   try {
     const attendees = await getAllAttendees();
     return NextResponse.json(attendees);
@@ -17,9 +14,7 @@ export async function GET(req: NextRequest) {
 
 // POST /api/admin/import  (same file, but we'll split — see import/route.ts)
 // DELETE /api/admin/attendees
-export async function DELETE(req: NextRequest) {
-  const denied = requireAdmin(req);
-  if (denied) return denied;
+export async function DELETE(_req: NextRequest) {
   try {
     await deleteAllAttendees();
     return NextResponse.json({ ok: true });

@@ -4,10 +4,8 @@ import { useState, useEffect, useRef } from "react";
 type Attendee = { id: string; name: string; company: string; email: string; phone: string };
 type SponsorCode = { code: string; company: string; tier: string; active: boolean; scan_count?: number };
 
-const ADMIN_SECRET = process.env.NEXT_PUBLIC_ADMIN_SECRET ?? "";
-
 function adminHeaders() {
-  return { "Content-Type": "application/json", "x-admin-secret": ADMIN_SECRET };
+  return { "Content-Type": "application/json" };
 }
 
 export default function AdminPage() {
@@ -155,9 +153,17 @@ export default function AdminPage() {
           <h1 style={{ fontSize: 18, fontWeight: 700 }}>Admin Dashboard</h1>
           <div className="text-muted text-xs">Conference Lead Scanner</div>
         </div>
-        <button className="btn btn-secondary btn-sm" onClick={loadData} disabled={loading}>
-          {loading ? "Loading…" : "↻ Refresh"}
-        </button>
+        <div style={{ display: "flex", gap: 8 }}>
+          <button className="btn btn-secondary btn-sm" onClick={loadData} disabled={loading}>
+            {loading ? "Loading…" : "↻ Refresh"}
+          </button>
+          <button className="btn btn-secondary btn-sm" onClick={async () => {
+            await fetch("/api/admin/logout", { method: "POST" });
+            window.location.href = "/admin/login";
+          }}>
+            Sign Out
+          </button>
+        </div>
       </div>
 
       {/* Tabs */}

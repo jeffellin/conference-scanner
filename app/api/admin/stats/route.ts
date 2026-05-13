@@ -1,10 +1,7 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { getScanStats } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
 
-export async function GET(req: NextRequest) {
-  const denied = requireAdmin(req);
-  if (denied) return denied;
+export async function GET() {
   try {
     return NextResponse.json(await getScanStats());
   } catch (err) {

@@ -1,11 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { upsertAttendees, generateShortId } from "@/lib/db";
-import { requireAdmin } from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
-  const denied = requireAdmin(req);
-  if (denied) return denied;
-
   try {
     const { csv } = await req.json();
     if (!csv) return NextResponse.json({ error: "No CSV data provided." }, { status: 400 });
