@@ -75,7 +75,7 @@ export default function ScanPage() {
         ctx.drawImage(video, 0, 0);
         const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "dontInvert",
+          inversionAttempts: "attemptBoth",
         });
         if (code?.data && code.data !== lastScannedRef.current) {
           lastScannedRef.current = code.data;
