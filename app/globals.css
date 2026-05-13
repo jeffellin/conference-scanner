@@ -123,3 +123,8 @@ label { display: block; font-size: 12px; font-weight: 600; color: var(--muted); 
 .stack { display: flex; flex-direction: column; gap: 12px; }
 .row { display: flex; align-items: center; gap: 12px; }
 .row-between { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+
+/* html5-qrcode overrides */
+#qr-scanner-container video { width: 100% !important; height: 100% !important; object-fit: cover !important; }
+#qr-scanner-container img { display: none !important; }
+#qr-scanner-container { border: none !important; }

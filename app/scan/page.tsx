@@ -1,7 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import jsQR from "jsqr";
 
 type Sponsor = { code: string; company: string; tier: string };
 type Attendee = { id: string; name: string; company: string; email: string; phone: string };
@@ -18,100 +17,64 @@ export default function ScanPage() {
   const [scanCount, setScanCount] = useState(0);
   const [error, setError] = useState("");
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const scannerRef = useRef<any>(null);
+  const sponsorRef = useRef<Sponsor | null>(null);
   const lastScannedRef = useRef<string>("");
 
-  // Load sponsor from session
   useEffect(() => {
     const raw = sessionStorage.getItem("sponsor");
     if (!raw) { router.push("/"); return; }
-    setSponsor(JSON.parse(raw));
+    const s = JSON.parse(raw);
+    setSponsor(s);
+    sponsorRef.current = s;
   }, [router]);
 
-  // Start camera
-  const startCamera = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode: "environment", width: { ideal: 1280 }, height: { ideal: 720 } },
-      });
-      streamRef.current = stream;
-      if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.play();
-      }
-    } catch {
-      setError("Camera access denied. Please allow camera permissions and reload.");
+  const stopScanner = useCallback(async () => {
+    if (scannerRef.current?.isScanning) {
+      await scannerRef.current.stop().catch(() => {});
+      scannerRef.current.clear();
     }
+    scannerRef.current = null;
   }, []);
 
-  // Stop camera
-  const stopCamera = useCallback(() => {
-    streamRef.current?.getTracks().forEach(t => t.stop());
-  }, []);
-
-  useEffect(() => {
-    if (scanning) startCamera();
-    else stopCamera();
-    return stopCamera;
-  }, [scanning, startCamera, stopCamera]);
-
-  // QR scan loop — uses BarcodeDetector (iOS 17+ / Chrome) with jsQR fallback
   useEffect(() => {
     if (!scanning) return;
 
-    const hasBarcodeDetector = "BarcodeDetector" in window;
-    let detector: any = null;
-    if (hasBarcodeDetector) {
-      detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
-    }
+    let cancelled = false;
 
-    const interval = setInterval(async () => {
-      const video = videoRef.current;
-      const canvas = canvasRef.current;
-      if (!video || video.readyState !== video.HAVE_ENOUGH_DATA || video.videoWidth === 0) return;
+    import("html5-qrcode").then(({ Html5Qrcode }) => {
+      if (cancelled) return;
+      const scanner = new Html5Qrcode("qr-scanner-container");
+      scannerRef.current = scanner;
 
-      // Try BarcodeDetector first
-      if (detector) {
-        try {
-          const codes = await detector.detect(video);
-          if (codes.length > 0) {
-            const raw = codes[0].rawValue;
-            if (raw && raw !== lastScannedRef.current) {
-              lastScannedRef.current = raw;
-              handleQRData(raw);
-            }
+      scanner.start(
+        { facingMode: "environment" },
+        { fps: 10 },
+        (decodedText: string) => {
+          if (decodedText !== lastScannedRef.current) {
+            lastScannedRef.current = decodedText;
+            handleQRData(decodedText);
           }
-        } catch { /* ignore detection errors */ }
-        return;
-      }
-
-      // jsQR fallback
-      if (!canvas) return;
-      canvas.width = video.videoWidth;
-      canvas.height = video.videoHeight;
-      const ctx = canvas.getContext("2d")!;
-      ctx.drawImage(video, 0, 0);
-      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-      const code = jsQR(imageData.data, imageData.width, imageData.height, {
-        inversionAttempts: "attemptBoth",
+        },
+        () => {}
+      ).catch(() => {
+        if (!cancelled) setError("Camera access denied. Please allow camera permissions and reload.");
       });
-      if (code?.data && code.data !== lastScannedRef.current) {
-        lastScannedRef.current = code.data;
-        handleQRData(code.data);
-      }
-    }, 250);
+    });
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      stopScanner();
+    };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning]);
 
   async function handleQRData(raw: string) {
-    // Support both full URL (https://…/scan/ATTENDEEID) and bare ID
     const id = raw.includes("/") ? raw.split("/").pop()! : raw;
-    if (!id || !sponsor) return;
+    const currentSponsor = sponsorRef.current;
+    if (!id || !currentSponsor) return;
 
+    await stopScanner();
     setScanning(false);
     setResult(null);
     setNotes("");
@@ -119,7 +82,7 @@ export default function ScanPage() {
 
     try {
       const res = await fetch(`/api/attendee/${id}`, {
-        headers: { "x-sponsor-code": sponsor.code },
+        headers: { "x-sponsor-code": currentSponsor.code },
       });
       if (!res.ok) {
         const d = await res.json();
@@ -140,11 +103,7 @@ export default function ScanPage() {
       const res = await fetch("/api/scan", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sponsorCode: sponsor.code,
-          attendeeId: result.attendee.id,
-          notes,
-        }),
+        body: JSON.stringify({ sponsorCode: sponsor.code, attendeeId: result.attendee.id, notes }),
       });
       if (res.ok) {
         setResult(r => r ? { ...r, saved: true } : null);
@@ -189,10 +148,7 @@ export default function ScanPage() {
             <div style={{ fontSize: 20, fontWeight: 700, color: "var(--accent2)" }}>{scanCount}</div>
             <div className="text-muted text-xs">scans</div>
           </div>
-          <button
-            className="btn btn-secondary btn-sm"
-            onClick={() => router.push("/leads")}
-          >
+          <button className="btn btn-secondary btn-sm" onClick={() => router.push("/leads")}>
             My Leads
           </button>
         </div>
@@ -204,26 +160,12 @@ export default function ScanPage() {
         {scanning && (
           <div className="fade-in stack">
             <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", background: "#000", aspectRatio: "4/3" }}>
-              <video
-                ref={videoRef}
-                style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }}
-                playsInline
-                muted
-              />
-              {/* Scan overlay */}
-              <div style={{
-                position: "absolute", inset: 0,
-                background: "linear-gradient(to bottom, rgba(0,0,0,0.3) 0%, transparent 30%, transparent 70%, rgba(0,0,0,0.3) 100%)",
-                pointerEvents: "none",
-              }} />
+              <div id="qr-scanner-container" style={{ width: "100%", height: "100%" }} />
               {/* Corner brackets */}
-              {["tl","tr","bl","br"].map(pos => (
+              {(["tl","tr","bl","br"] as const).map(pos => (
                 <div key={pos} style={{
-                  position: "absolute",
-                  width: 32, height: 32,
-                  borderColor: "var(--accent2)",
-                  borderStyle: "solid",
-                  borderWidth: 0,
+                  position: "absolute", width: 32, height: 32,
+                  borderColor: "var(--accent2)", borderStyle: "solid", borderWidth: 0, zIndex: 2,
                   ...(pos === "tl" ? { top: 24, left: 24, borderTopWidth: 3, borderLeftWidth: 3 } : {}),
                   ...(pos === "tr" ? { top: 24, right: 24, borderTopWidth: 3, borderRightWidth: 3 } : {}),
                   ...(pos === "bl" ? { bottom: 24, left: 24, borderBottomWidth: 3, borderLeftWidth: 3 } : {}),
@@ -232,17 +174,16 @@ export default function ScanPage() {
               ))}
               {/* Animated scan line */}
               <div style={{
-                position: "absolute", left: "10%", right: "10%", height: 2,
+                position: "absolute", left: "10%", right: "10%", height: 2, zIndex: 2,
                 background: "linear-gradient(90deg, transparent, var(--accent2), transparent)",
                 animation: "scanLine 2s ease-in-out infinite",
                 boxShadow: "0 0 8px var(--accent2)",
               }} />
-              <canvas ref={canvasRef} style={{ display: "none" }} />
             </div>
             <p className="text-muted text-sm" style={{ textAlign: "center" }}>
               Point camera at attendee badge QR code
             </p>
-            <p className="text-muted text-xs" style={{ textAlign: "center" }}>v2 — BarcodeDetector</p>
+            <p className="text-muted text-xs" style={{ textAlign: "center" }}>v3 — html5-qrcode</p>
             {error && (
               <div style={{ background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "10px 14px", color: "#fca5a5", fontSize: 13 }}>
                 {error}
@@ -261,9 +202,7 @@ export default function ScanPage() {
                   <h2 style={{ fontSize: 20, fontWeight: 700 }}>{result.attendee.name}</h2>
                   <div style={{ color: "var(--accent2)", fontWeight: 500, marginTop: 2 }}>{result.attendee.company}</div>
                 </div>
-                {result.saved && (
-                  <span className="badge badge-active">Saved</span>
-                )}
+                {result.saved && <span className="badge badge-active">Saved</span>}
               </div>
               <div className="divider" style={{ margin: "12px 0" }} />
               <div className="stack" style={{ gap: 8 }}>
@@ -286,7 +225,6 @@ export default function ScanPage() {
               </div>
             </div>
 
-            {/* Notes */}
             <div>
               <label>Notes</label>
               <textarea
@@ -310,12 +248,7 @@ export default function ScanPage() {
             )}
 
             <div style={{ display: "flex", gap: 10 }}>
-              <button
-                className="btn btn-primary"
-                style={{ flex: 1 }}
-                onClick={saveLead}
-                disabled={saving}
-              >
+              <button className="btn btn-primary" style={{ flex: 1 }} onClick={saveLead} disabled={saving}>
                 {saving ? "Saving…" : result.saved ? "Update Notes" : "Save Lead"}
               </button>
               <button className="btn btn-secondary" style={{ flex: 1 }} onClick={resetScanner}>
