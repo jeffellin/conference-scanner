@@ -20,6 +20,11 @@ export default function ScanPage() {
   const scannerRef = useRef<any>(null);
   const sponsorRef = useRef<Sponsor | null>(null);
   const lastScannedRef = useRef<string>("");
+  const [debugLog, setDebugLog] = useState<string[]>([]);
+
+  function dbg(msg: string) {
+    setDebugLog(prev => [...prev.slice(-6), `${new Date().toISOString().slice(11,19)} ${msg}`]);
+  }
 
   useEffect(() => {
     const raw = sessionStorage.getItem("sponsor");
@@ -42,24 +47,33 @@ export default function ScanPage() {
 
     let cancelled = false;
 
+    dbg("importing html5-qrcode…");
     import("html5-qrcode").then(({ Html5Qrcode }) => {
       if (cancelled) return;
+      dbg("creating scanner");
       const scanner = new Html5Qrcode("qr-scanner-container");
       scannerRef.current = scanner;
 
+      dbg("starting camera…");
       scanner.start(
         { facingMode: "environment" },
         { fps: 10 },
         (decodedText: string) => {
+          dbg(`QR detected: ${decodedText.slice(0, 30)}`);
           if (decodedText !== lastScannedRef.current) {
             lastScannedRef.current = decodedText;
             handleQRData(decodedText);
           }
         },
-        () => {}
-      ).catch(() => {
+        (err: any) => { dbg(`scan err: ${String(err).slice(0, 40)}`); }
+      ).then(() => {
+        dbg("camera started OK");
+      }).catch((err: any) => {
+        dbg(`start failed: ${String(err).slice(0, 50)}`);
         if (!cancelled) setError("Camera access denied. Please allow camera permissions and reload.");
       });
+    }).catch((err: any) => {
+      dbg(`import failed: ${String(err).slice(0, 50)}`);
     });
 
     return () => {
@@ -183,7 +197,13 @@ export default function ScanPage() {
             <p className="text-muted text-sm" style={{ textAlign: "center" }}>
               Point camera at attendee badge QR code
             </p>
-            <p className="text-muted text-xs" style={{ textAlign: "center" }}>v3 — html5-qrcode</p>
+            <p className="text-muted text-xs" style={{ textAlign: "center" }}>v4 — html5-qrcode</p>
+            <div style={{
+              background: "#0a0a1a", border: "1px solid var(--border2)",
+              borderRadius: 8, padding: "8px 10px", fontFamily: "monospace", fontSize: 11, color: "#86efac",
+            }}>
+              {debugLog.length === 0 ? "waiting…" : debugLog.map((l, i) => <div key={i}>{l}</div>)}
+            </div>
             {error && (
               <div style={{ background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "10px 14px", color: "#fca5a5", fontSize: 13 }}>
                 {error}
