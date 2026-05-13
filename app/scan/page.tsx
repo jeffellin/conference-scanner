@@ -47,6 +47,8 @@ export default function ScanPage() {
 
     let cancelled = false;
 
+    // Small delay to ensure React has painted the container div to the DOM
+    const timer = setTimeout(() => {
     dbg("importing html5-qrcode…");
     import("html5-qrcode").then(({ Html5Qrcode }) => {
       if (cancelled) return;
@@ -75,13 +77,15 @@ export default function ScanPage() {
     }).catch((err: any) => {
       dbg(`import failed: ${String(err).slice(0, 50)}`);
     });
+    }, 100);
 
     return () => {
       cancelled = true;
+      clearTimeout(timer);
       stopScanner();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [scanning]);
+  }, [scanning, sponsor]);
 
   async function handleQRData(raw: string) {
     const id = raw.includes("/") ? raw.split("/").pop()! : raw;
@@ -174,7 +178,8 @@ export default function ScanPage() {
         {scanning && (
           <div className="fade-in stack">
             <div style={{ position: "relative", borderRadius: 16, overflow: "hidden", background: "#000", aspectRatio: "4/3" }}>
-              <div id="qr-scanner-container" style={{ width: "100%", height: "100%" }} />
+              {/* Always in DOM so html5-qrcode can find it */}
+              <div id="qr-scanner-container" style={{ width: "100%", height: "100%", display: scanning ? "block" : "none" }} />
               {/* Corner brackets */}
               {(["tl","tr","bl","br"] as const).map(pos => (
                 <div key={pos} style={{
