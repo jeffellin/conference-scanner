@@ -21,7 +21,6 @@ export default function ScanPage() {
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
-  const animRef = useRef<number>(0);
   const lastScannedRef = useRef<string>("");
 
   // Load sponsor from session
@@ -50,7 +49,6 @@ export default function ScanPage() {
   // Stop camera
   const stopCamera = useCallback(() => {
     streamRef.current?.getTracks().forEach(t => t.stop());
-    cancelAnimationFrame(animRef.current);
   }, []);
 
   useEffect(() => {
@@ -62,13 +60,15 @@ export default function ScanPage() {
   // QR scan loop
   useEffect(() => {
     if (!scanning) return;
-    let active = true;
 
-    function tick() {
-      if (!active) return;
+    const interval = setInterval(() => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (video && canvas && video.readyState === video.HAVE_ENOUGH_DATA) {
+      if (
+        video && canvas &&
+        video.readyState === video.HAVE_ENOUGH_DATA &&
+        video.videoWidth > 0
+      ) {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext("2d")!;
@@ -80,13 +80,11 @@ export default function ScanPage() {
         if (code?.data && code.data !== lastScannedRef.current) {
           lastScannedRef.current = code.data;
           handleQRData(code.data);
-          return;
         }
       }
-      animRef.current = requestAnimationFrame(tick);
-    }
-    animRef.current = requestAnimationFrame(tick);
-    return () => { active = false; cancelAnimationFrame(animRef.current); };
+    }, 250);
+
+    return () => clearInterval(interval);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scanning]);
 
