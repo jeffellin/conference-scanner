@@ -18,7 +18,7 @@ export async function GET(req: NextRequest, { params }: { params: { code: string
 
   try {
     const leads = await getScansForCode(params.code);
-    return NextResponse.json({ leads });
+    return NextResponse.json({ leads }, { headers: { "Cache-Control": "no-store" } });
   } catch (err) {
     console.error(err);
     return NextResponse.json({ error: "Server error." }, { status: 500 });

@@ -30,6 +30,7 @@ export default function LeadsPage() {
     try {
       const res = await fetch(`/api/export/${code}`, {
         headers: { "x-sponsor-code": code },
+        cache: "no-store",
       });
       if (res.ok) {
         const data = await res.json();
