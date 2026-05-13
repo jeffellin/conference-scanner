@@ -1,15 +1,15 @@
 # Conference Lead Scanner
 
-A sponsor lead capture PWA built on Next.js + Vercel Postgres. Sponsors scan attendee badge QR codes on their own phones — no app install required.
+A sponsor lead capture PWA built on Next.js + Neon Postgres. Sponsors scan attendee badge QR codes on their own phones — no app install required.
 
 ---
 
 ## Stack
 
 - **Next.js 14** (App Router)
-- **Vercel Postgres** (Neon) — attendees, sponsor codes, scan logs
-- **Vercel Password Protection** — gates the `/admin` route
-- **jsQR** — in-browser QR scanning via device camera
+- **Neon Postgres** — attendees, sponsor codes, scan logs
+- **Next.js Middleware** — cookie-based password protection for `/admin`
+- **BarcodeDetector API** (iOS 17+ / Chrome) with **jsQR** fallback — in-browser QR scanning
 - **PWA** — installable on iOS/Android, works offline for previously loaded pages
 
 ---
@@ -30,38 +30,45 @@ npm install
 npx vercel link
 ```
 
-### 3. Provision Vercel Postgres
+### 3. Provision Neon Postgres
 
-1. Go to your Vercel project → **Storage** tab
-2. Create a new **Postgres** database
-3. Click **Connect** to link it to your project
-4. This automatically adds `POSTGRES_URL` and related env vars
+1. Go to [neon.tech](https://neon.tech) and create a free project
+2. Copy the **pooled connection string**
+3. In Vercel project settings → **Environment Variables**, add `POSTGRES_URL` with that value
+
+Alternatively, use the Vercel Marketplace to connect Neon — it will add the env var automatically.
 
 ### 4. Run the schema
 
-In the Vercel Postgres console (Storage → your DB → Query tab), paste and run the contents of `schema.sql`.
+In the Neon SQL Editor, run `schema.sql` in two batches:
+
+**First:**
+```sql
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+```
+
+**Then:**
+```sql
+CREATE TABLE attendees ( ... );
+CREATE TABLE sponsor_codes ( ... );
+CREATE TABLE scan_logs ( ... );
+-- (see schema.sql for full contents)
+```
 
 ### 5. Set environment variables
 
-In Vercel project settings → **Environment Variables**, add:
+In Vercel project settings → **Environment Variables**:
 
 | Variable | Value | Notes |
 |---|---|---|
-| `ADMIN_SECRET` | A strong random string | Used to authenticate admin API calls |
-| `NEXT_PUBLIC_ADMIN_SECRET` | Same value as above | Exposed to admin frontend (admin is already password protected) |
+| `POSTGRES_URL` | Neon pooled connection string | Added automatically if using Marketplace |
+| `ADMIN_SECRET` | A strong random string | Admin login password |
 
 Generate a good secret: `openssl rand -hex 32`
 
-### 6. Enable Vercel Password Protection (Admin)
+> **Note:** `NEXT_PUBLIC_ADMIN_SECRET` is no longer used and should not be set.
 
-In Vercel project settings → **Security** → **Password Protection**:
-- Enable for **Preview** and/or **Production**
-- Set the path to `/admin` only (if your plan supports path-level protection)
-- Or enable site-wide and share the password only with your team
-
-> **Note:** Path-level password protection requires a Pro plan. On free tier, you can protect the entire site or rely solely on the `ADMIN_SECRET` header for API security.
-
-### 7. Deploy
+### 6. Deploy
 
 ```bash
 npx vercel --prod
@@ -73,8 +80,8 @@ npx vercel --prod
 
 ### As Organizer (Admin)
 
-1. Go to `https://yourapp.vercel.app/admin`
-2. Enter your Vercel password protection password
+1. Go to `https://yourapp.vercel.app/admin` — you will be redirected to `/admin/login`
+2. Enter your `ADMIN_SECRET` password
 3. **Import attendees**: Upload CSV with columns `name, company, email, phone`
 4. **Export Badge QR data**: Downloads a CSV with `id, name, company, qr_content` — send this to your badge printer. The `qr_content` column contains the full scan URL for each attendee.
 5. **Create sponsor codes**: Add a code, company name, and tier for each sponsor
@@ -86,10 +93,10 @@ npx vercel --prod
 1. Open `https://yourapp.vercel.app` on your phone
 2. Enter your sponsor code
 3. Tap **Enter Scanner** → allow camera access
-4. Point camera at attendee badge QR code
+4. Point camera at attendee badge QR code — detection is automatic, no tap needed
 5. Attendee info appears — add optional notes
 6. Tap **Save Lead**
-7. Tap **My Leads** to review and export your captures
+7. Tap **My Leads** to review, edit notes, and export your captures
 
 ---
 
@@ -132,12 +139,14 @@ These are safe to also print as human-readable text under the QR code on badges,
 
 | Layer | Protection |
 |---|---|
-| Admin UI | Vercel Password Protection |
-| Admin APIs | `x-admin-secret` header check |
+| Admin UI | Cookie-based login — password checked against `ADMIN_SECRET` server-side |
+| Admin APIs | Next.js middleware verifies signed `httpOnly` cookie before any `/api/admin/*` request |
 | Attendee lookup | Requires valid active sponsor code (`x-sponsor-code` header) |
 | Scan logging | Requires valid active sponsor code |
 | Cross-sponsor data | Impossible — each export query is scoped to a single sponsor code |
 | Raw PII in QR | None — QR only contains an opaque 7-char ID |
+
+The admin session cookie is `httpOnly`, `sameSite: lax`, and `secure` in production. The `ADMIN_SECRET` is never exposed to the browser.
 
 ---
 
@@ -152,6 +161,17 @@ npm run dev
 ```
 
 The app will be at `http://localhost:3000`.
+
+---
+
+## Duplicate Scan Handling
+
+If a sponsor scans an attendee they have already captured:
+- The card shows an **"Already scanned"** badge
+- The notes field is pre-populated with their previous notes
+- Saving updates the existing record's notes
+
+Sponsors can also tap any lead in **My Leads** to edit notes inline.
 
 ---
 
