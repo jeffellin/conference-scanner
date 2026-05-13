@@ -57,30 +57,49 @@ export default function ScanPage() {
     return stopCamera;
   }, [scanning, startCamera, stopCamera]);
 
-  // QR scan loop
+  // QR scan loop — uses BarcodeDetector (iOS 17+ / Chrome) with jsQR fallback
   useEffect(() => {
     if (!scanning) return;
 
-    const interval = setInterval(() => {
+    const hasBarcodeDetector = "BarcodeDetector" in window;
+    let detector: any = null;
+    if (hasBarcodeDetector) {
+      detector = new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+    }
+
+    const interval = setInterval(async () => {
       const video = videoRef.current;
       const canvas = canvasRef.current;
-      if (
-        video && canvas &&
-        video.readyState === video.HAVE_ENOUGH_DATA &&
-        video.videoWidth > 0
-      ) {
-        canvas.width = video.videoWidth;
-        canvas.height = video.videoHeight;
-        const ctx = canvas.getContext("2d")!;
-        ctx.drawImage(video, 0, 0);
-        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
-        const code = jsQR(imageData.data, imageData.width, imageData.height, {
-          inversionAttempts: "attemptBoth",
-        });
-        if (code?.data && code.data !== lastScannedRef.current) {
-          lastScannedRef.current = code.data;
-          handleQRData(code.data);
-        }
+      if (!video || video.readyState !== video.HAVE_ENOUGH_DATA || video.videoWidth === 0) return;
+
+      // Try BarcodeDetector first
+      if (detector) {
+        try {
+          const codes = await detector.detect(video);
+          if (codes.length > 0) {
+            const raw = codes[0].rawValue;
+            if (raw && raw !== lastScannedRef.current) {
+              lastScannedRef.current = raw;
+              handleQRData(raw);
+            }
+          }
+        } catch { /* ignore detection errors */ }
+        return;
+      }
+
+      // jsQR fallback
+      if (!canvas) return;
+      canvas.width = video.videoWidth;
+      canvas.height = video.videoHeight;
+      const ctx = canvas.getContext("2d")!;
+      ctx.drawImage(video, 0, 0);
+      const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+      const code = jsQR(imageData.data, imageData.width, imageData.height, {
+        inversionAttempts: "attemptBoth",
+      });
+      if (code?.data && code.data !== lastScannedRef.current) {
+        lastScannedRef.current = code.data;
+        handleQRData(code.data);
       }
     }, 250);
 
@@ -223,6 +242,7 @@ export default function ScanPage() {
             <p className="text-muted text-sm" style={{ textAlign: "center" }}>
               Point camera at attendee badge QR code
             </p>
+            <p className="text-muted text-xs" style={{ textAlign: "center" }}>v2 — BarcodeDetector</p>
             {error && (
               <div style={{ background: "#450a0a", border: "1px solid #7f1d1d", borderRadius: 8, padding: "10px 14px", color: "#fca5a5", fontSize: 13 }}>
                 {error}
