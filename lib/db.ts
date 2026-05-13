@@ -101,6 +101,7 @@ export async function getScansForCode(sponsorCode: string) {
   const { rows } = await sql`
     SELECT
       sl.id,
+      sl.attendee_id,
       sl.notes,
       sl.scanned_at,
       a.name,

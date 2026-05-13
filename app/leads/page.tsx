@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 
 type Lead = {
   id: string;
+  attendee_id: string;
   name: string;
   company: string;
   email: string;
@@ -17,6 +18,9 @@ export default function LeadsPage() {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [sponsor, setSponsor] = useState<{ code: string; company: string } | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editNotes, setEditNotes] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     const raw = sessionStorage.getItem("sponsor");
@@ -38,6 +42,34 @@ export default function LeadsPage() {
       }
     } finally {
       setLoading(false);
+    }
+  }
+
+  function startEdit(lead: Lead) {
+    setEditingId(lead.id);
+    setEditNotes(lead.notes ?? "");
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setEditNotes("");
+  }
+
+  async function saveEdit(lead: Lead) {
+    if (!sponsor) return;
+    setSaving(true);
+    try {
+      const res = await fetch("/api/scan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sponsorCode: sponsor.code, attendeeId: lead.attendee_id, notes: editNotes }),
+      });
+      if (res.ok) {
+        setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, notes: editNotes } : l));
+        setEditingId(null);
+      }
+    } finally {
+      setSaving(false);
     }
   }
 
@@ -95,31 +127,75 @@ export default function LeadsPage() {
         )}
 
         <div className="stack">
-          {leads.map(lead => (
-            <div key={lead.id} className="card fade-in">
-              <div style={{ marginBottom: 8 }}>
-                <div style={{ fontWeight: 700, fontSize: 15 }}>{lead.name}</div>
-                <div style={{ color: "var(--accent2)", fontSize: 13 }}>{lead.company}</div>
-              </div>
-              {(lead.email || lead.phone) && (
-                <div className="stack" style={{ gap: 4, marginBottom: 8 }}>
-                  {lead.email && <div className="text-sm text-muted">{lead.email}</div>}
-                  {lead.phone && <div className="text-sm text-muted">{lead.phone}</div>}
+          {leads.map(lead => {
+            const isEditing = editingId === lead.id;
+            return (
+              <div
+                key={lead.id}
+                className="card fade-in"
+                onClick={() => !isEditing && startEdit(lead)}
+                style={{ cursor: isEditing ? "default" : "pointer", transition: "border-color 0.15s",
+                  borderColor: isEditing ? "var(--accent)" : "var(--border)" }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 8 }}>
+                  <div>
+                    <div style={{ fontWeight: 700, fontSize: 15 }}>{lead.name}</div>
+                    <div style={{ color: "var(--accent2)", fontSize: 13 }}>{lead.company}</div>
+                  </div>
+                  {!isEditing && (
+                    <span className="text-muted text-xs" style={{ paddingTop: 2 }}>Edit</span>
+                  )}
                 </div>
-              )}
-              {lead.notes && (
-                <div style={{
-                  background: "var(--surface2)", borderRadius: 6, padding: "8px 10px",
-                  fontSize: 13, color: "var(--text)", marginBottom: 8,
-                }}>
-                  {lead.notes}
-                </div>
-              )}
-              <div className="text-xs text-muted">
-                {new Date(lead.scanned_at).toLocaleString()}
+
+                {(lead.email || lead.phone) && (
+                  <div className="stack" style={{ gap: 4, marginBottom: 8 }}>
+                    {lead.email && <div className="text-sm text-muted">{lead.email}</div>}
+                    {lead.phone && <div className="text-sm text-muted">{lead.phone}</div>}
+                  </div>
+                )}
+
+                {isEditing ? (
+                  <div className="stack" style={{ gap: 8 }} onClick={e => e.stopPropagation()}>
+                    <textarea
+                      className="textarea"
+                      value={editNotes}
+                      onChange={e => setEditNotes(e.target.value)}
+                      placeholder="Add notes…"
+                      rows={3}
+                      autoFocus
+                    />
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        className="btn btn-primary btn-sm"
+                        style={{ flex: 1 }}
+                        onClick={() => saveEdit(lead)}
+                        disabled={saving}
+                      >
+                        {saving ? "Saving…" : "Save"}
+                      </button>
+                      <button className="btn btn-secondary btn-sm" style={{ flex: 1 }} onClick={cancelEdit}>
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    {lead.notes && (
+                      <div style={{
+                        background: "var(--surface2)", borderRadius: 6, padding: "8px 10px",
+                        fontSize: 13, color: "var(--text)", marginBottom: 8,
+                      }}>
+                        {lead.notes}
+                      </div>
+                    )}
+                    <div className="text-xs text-muted">
+                      {new Date(lead.scanned_at).toLocaleString()}
+                    </div>
+                  </>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
