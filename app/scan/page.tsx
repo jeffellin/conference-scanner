@@ -138,6 +138,7 @@ export default function ScanPage() {
       if (!res.ok) {
         const d = await res.json();
         setError(d.error ?? "Attendee not found.");
+        setScanning(true); // re-enable scanner so the error is visible
         return;
       }
       const attendee: Attendee = await res.json();
