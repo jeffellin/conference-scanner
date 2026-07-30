@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
+import QRCode from "qrcode";
 
 type Attendee = { id: string; name: string; company: string; email: string; phone: string };
 
@@ -13,6 +14,14 @@ export default function EditAttendeePage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
+  const [scanUrl, setScanUrl] = useState("");
+  const [qrDataUrl, setQrDataUrl] = useState("");
+
+  useEffect(() => {
+    const url = `${window.location.origin}/scan/${id}`;
+    setScanUrl(url);
+    QRCode.toDataURL(url, { width: 220, margin: 1 }).then(setQrDataUrl).catch(() => {});
+  }, [id]);
 
   useEffect(() => {
     fetch(`/api/admin/attendees/${id}`)
@@ -124,6 +133,20 @@ export default function EditAttendeePage() {
             </button>
           </div>
         </form>
+      </div>
+
+      <div className="card fade-in" style={{ width: "100%", maxWidth: 420, marginTop: 16, textAlign: "center" }}>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 12 }}>Badge QR Code</div>
+        {qrDataUrl ? (
+          <img
+            src={qrDataUrl}
+            alt={`QR code for ${attendee.name}`}
+            style={{ width: 220, height: 220, borderRadius: 8, background: "#fff", padding: 8 }}
+          />
+        ) : (
+          <div className="text-muted text-sm" style={{ padding: 40 }}>Generating…</div>
+        )}
+        <div className="text-muted text-xs mono" style={{ marginTop: 10, wordBreak: "break-all" }}>{scanUrl}</div>
       </div>
 
       <div className="card fade-in" style={{ width: "100%", maxWidth: 420, marginTop: 16, borderColor: "var(--danger)" }}>
