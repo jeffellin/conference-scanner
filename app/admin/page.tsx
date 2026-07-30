@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
+import { useRouter } from "next/navigation";
 
 type Attendee = { id: string; name: string; company: string; email: string; phone: string };
 type SponsorCode = { code: string; company: string; tier: string; active: boolean; scan_count?: number };
@@ -9,6 +10,7 @@ function adminHeaders() {
 }
 
 export default function AdminPage() {
+  const router = useRouter();
   const [tab, setTab] = useState<"attendees" | "sponsors" | "stats">("attendees");
   const [attendees, setAttendees] = useState<Attendee[]>([]);
   const [codes, setCodes] = useState<SponsorCode[]>([]);
@@ -234,7 +236,7 @@ export default function AdminPage() {
                   <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
                     <thead>
                       <tr style={{ borderBottom: "1px solid var(--border)" }}>
-                        {["ID", "Name", "Company", "Email", "Phone"].map(h => (
+                        {["ID", "Name", "Company", "Email", "Phone", ""].map(h => (
                           <th key={h} style={{ padding: "8px 12px", textAlign: "left", color: "var(--muted)", fontWeight: 600, fontSize: 11, textTransform: "uppercase", letterSpacing: 0.5 }}>{h}</th>
                         ))}
                       </tr>
@@ -247,6 +249,11 @@ export default function AdminPage() {
                           <td style={{ padding: "8px 12px" }} className="text-muted">{a.company}</td>
                           <td style={{ padding: "8px 12px" }} className="text-muted">{a.email}</td>
                           <td style={{ padding: "8px 12px" }} className="text-muted">{a.phone}</td>
+                          <td style={{ padding: "8px 12px" }}>
+                            <button className="btn btn-secondary btn-sm" onClick={() => router.push(`/admin/attendees/${a.id}`)}>
+                              Edit
+                            </button>
+                          </td>
                         </tr>
                       ))}
                     </tbody>

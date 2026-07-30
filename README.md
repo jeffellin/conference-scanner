@@ -16,63 +16,89 @@ A sponsor lead capture PWA built on Next.js + Neon Postgres. Sponsors scan atten
 
 ## Setup
 
-### 1. Clone & install
+No CLI or local machine required — this can be done entirely from the Vercel and Neon web dashboards.
 
+### 1. Import the project into Vercel
+
+1. Go to [vercel.com/new](https://vercel.com/new) and sign in (GitHub login is easiest).
+2. Click **Import** next to this repo. If it's not listed, grant Vercel's GitHub App access to it first.
+3. Leave the framework preset as **Next.js** (auto-detected).
+4. Expand **Environment Variables** and add:
+
+   | Key | Value |
+   |---|---|
+   | `ADMIN_SECRET` | A strong random string — this is the admin login password |
+
+   Generate one with `openssl rand -hex 32`, or any password generator.
+
+   > **Note:** `NEXT_PUBLIC_ADMIN_SECRET` is not used and should not be set — it would expose the secret to the browser.
+
+5. Click **Deploy**. The build will succeed, but any page that hits the database will error until the next step is done — that's expected.
+
+### 2. Create the Postgres database
+
+1. Open the new project → **Storage** tab (left sidebar) → **Create Database**.
+2. Choose **Neon** (Postgres) from the marketplace, give it a name, pick a region, and confirm.
+3. Vercel automatically connects it to the project and adds a `POSTGRES_URL` environment variable — no copy/pasting a connection string.
+4. **Redeploy the project** so it picks up the new variable: go to the **Deployments** tab, open the latest deployment, click the **⋯** menu → **Redeploy**. Env vars only take effect on deployments created after they're added, so the deploy from step 1 won't have `POSTGRES_URL` until you do this.
+
+### 3. Run the schema
+
+1. From the **Storage** tab, click into the database — it links out to the **Neon console**.
+2. Open the **SQL Editor** there.
+3. If you see the error `cannot execute ... in a read-only transaction`, the database has a read-only toggle enabled — find it in the Neon console (project/branch settings) and disable it, then continue.
+4. Run the following statements **one at a time** (paste one, click Run, then move to the next). The Neon SQL Editor can't run multiple semicolon-separated statements in a single execution — pasting the whole file at once fails with `cannot insert multiple commands into a prepared statement`.
+
+   ```sql
+   CREATE EXTENSION IF NOT EXISTS pgcrypto;
+   ```
+   ```sql
+   CREATE TABLE attendees (
+     id          VARCHAR(8) PRIMARY KEY,
+     name        VARCHAR(255) NOT NULL,
+     company     VARCHAR(255),
+     email       VARCHAR(255),
+     phone       VARCHAR(50),
+     created_at  TIMESTAMPTZ DEFAULT NOW()
+   );
+   ```
+   ```sql
+   CREATE TABLE sponsor_codes (
+     code        VARCHAR(50) PRIMARY KEY,
+     company     VARCHAR(255) NOT NULL,
+     tier        VARCHAR(50) DEFAULT 'Standard',
+     active      BOOLEAN DEFAULT TRUE,
+     created_at  TIMESTAMPTZ DEFAULT NOW()
+   );
+   ```
+   ```sql
+   CREATE TABLE scan_logs (
+     id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+     sponsor_code  VARCHAR(50) NOT NULL REFERENCES sponsor_codes(code),
+     attendee_id   VARCHAR(8) NOT NULL REFERENCES attendees(id),
+     notes         TEXT,
+     scanned_at    TIMESTAMPTZ DEFAULT NOW(),
+     UNIQUE(sponsor_code, attendee_id)
+   );
+   ```
+   ```sql
+   CREATE INDEX idx_scan_logs_sponsor ON scan_logs(sponsor_code);
+   ```
+   ```sql
+   CREATE INDEX idx_scan_logs_attendee ON scan_logs(attendee_id);
+   ```
+   ```sql
+   CREATE INDEX idx_attendees_name ON attendees(name);
+   ```
+
+**Prefer the command line?** If you have `psql` installed and the database's direct (non-pooled) connection string, you can run the whole file in one shot instead of pasting statements individually:
 ```bash
-git clone <your-repo>
-cd conference-scanner
-npm install
+psql "<direct-connection-string>" -f schema.sql
 ```
 
-### 2. Create Vercel project
+### 4. Verify
 
-```bash
-npx vercel link
-```
-
-### 3. Provision Neon Postgres
-
-1. Go to [neon.tech](https://neon.tech) and create a free project
-2. Copy the **pooled connection string**
-3. In Vercel project settings → **Environment Variables**, add `POSTGRES_URL` with that value
-
-Alternatively, use the Vercel Marketplace to connect Neon — it will add the env var automatically.
-
-### 4. Run the schema
-
-In the Neon SQL Editor, run `schema.sql` in two batches:
-
-**First:**
-```sql
-CREATE EXTENSION IF NOT EXISTS pgcrypto;
-```
-
-**Then:**
-```sql
-CREATE TABLE attendees ( ... );
-CREATE TABLE sponsor_codes ( ... );
-CREATE TABLE scan_logs ( ... );
--- (see schema.sql for full contents)
-```
-
-### 5. Set environment variables
-
-In Vercel project settings → **Environment Variables**:
-
-| Variable | Value | Notes |
-|---|---|---|
-| `POSTGRES_URL` | Neon pooled connection string | Added automatically if using Marketplace |
-| `ADMIN_SECRET` | A strong random string | Admin login password |
-
-Generate a good secret: `openssl rand -hex 32`
-
-> **Note:** `NEXT_PUBLIC_ADMIN_SECRET` is no longer used and should not be set.
-
-### 6. Deploy
-
-```bash
-npx vercel --prod
-```
+Visit `https://<your-project>.vercel.app/admin`, log in with the `ADMIN_SECRET` from step 1, and try importing a test attendee CSV to confirm everything is wired up.
 
 ---
 

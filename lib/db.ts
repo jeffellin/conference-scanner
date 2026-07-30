@@ -18,6 +18,31 @@ export async function getAttendeeById(id: string, sponsorCode?: string) {
   return rows[0] ?? null;
 }
 
+export async function getAttendee(id: string) {
+  const { rows } = await sql`
+    SELECT id, name, company, email, phone
+    FROM attendees
+    WHERE id = ${id}
+  `;
+  return rows[0] ?? null;
+}
+
+export async function updateAttendee(
+  id: string,
+  attendee: { name: string; company: string; email: string; phone: string }
+) {
+  await sql`
+    UPDATE attendees
+    SET name = ${attendee.name}, company = ${attendee.company}, email = ${attendee.email}, phone = ${attendee.phone}
+    WHERE id = ${id}
+  `;
+}
+
+export async function deleteAttendee(id: string) {
+  await sql`DELETE FROM scan_logs WHERE attendee_id = ${id}`;
+  await sql`DELETE FROM attendees WHERE id = ${id}`;
+}
+
 export async function getAllAttendees() {
   const { rows } = await sql`
     SELECT id, name, company, email, phone, created_at
