@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAllAttendees, deleteAllAttendees } from "@/lib/db";
 
+// Neon's driver queries over fetch(); without this, Next's Data Cache can
+// silently cache and replay stale DB reads.
+export const dynamic = "force-dynamic";
+
 // GET /api/admin/attendees
 export async function GET(_req: NextRequest) {
   try {

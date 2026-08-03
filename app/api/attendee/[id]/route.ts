@@ -1,6 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAttendeeById, verifySponsorCode } from "@/lib/db";
 
+// Neon's driver queries over fetch(); without this, Next's Data Cache can
+// silently cache and replay stale DB reads.
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest, { params }: { params: { id: string } }) {
   try {
     // Require a valid sponsor code on every lookup

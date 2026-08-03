@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { getScansForCode, verifySponsorCode } from "@/lib/db";
 import { requireAdmin } from "@/lib/auth";
 
+// Neon's driver queries over fetch(); without this, Next's Data Cache can
+// silently cache and replay stale DB reads.
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest, { params }: { params: { code: string } }) {
   // Allow either admin secret OR the matching sponsor code
   const adminCheck = await requireAdmin(req);
