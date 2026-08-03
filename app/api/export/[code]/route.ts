@@ -4,7 +4,7 @@ import { requireAdmin } from "@/lib/auth";
 
 export async function GET(req: NextRequest, { params }: { params: { code: string } }) {
   // Allow either admin secret OR the matching sponsor code
-  const adminCheck = requireAdmin(req);
+  const adminCheck = await requireAdmin(req);
   const sponsorCode = req.headers.get("x-sponsor-code");
 
   if (adminCheck !== null) {
