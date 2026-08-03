@@ -1,6 +1,14 @@
-import { sql } from "@vercel/postgres";
+import { neon } from "@neondatabase/serverless";
 
-export { sql };
+// @vercel/postgres's `sql` tag always queries Neon over fetch() under the
+// hood, and doesn't expose a way to set the fetch cache option — so Next's
+// Data Cache was silently caching and replaying stale query results
+// (confirmed via Vercel's Function Invocation logs). Calling `neon()`
+// directly lets us force `cache: "no-store"` on every query.
+export const sql = neon(process.env.POSTGRES_URL!, {
+  fullResults: true,
+  fetchOptions: { cache: "no-store" },
+});
 
 // ── Attendees ────────────────────────────────────────────────────────────────
 
