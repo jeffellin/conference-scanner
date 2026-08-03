@@ -319,7 +319,7 @@ export default function ScanPage() {
 
             <div style={{ display: "flex", gap: 10 }}>
               <button className="btn btn-primary" style={{ flex: 1 }} onClick={saveLead} disabled={saving}>
-                {saving ? "Saving…" : result.saved ? "Saved ✓" : result.attendee.existing_scanned_at ? "Update Notes" : "Save Lead"}
+                {saving ? "Saving…" : result.saved ? "Saved ✓" : result.attendee.existing_scanned_at ? "Log New Scan" : "Save Lead"}
               </button>
               <button className="btn btn-secondary" style={{ flex: 1 }} onClick={resetScanner}>
                 Scan Next

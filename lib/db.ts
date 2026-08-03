@@ -16,11 +16,16 @@ export async function getAttendeeById(id: string, sponsorCode?: string) {
   const { rows } = await sql`
     SELECT
       a.id, a.name, a.company, a.email, a.phone,
-      sl.notes AS existing_notes,
-      sl.scanned_at AS existing_scanned_at
+      latest.notes AS existing_notes,
+      latest.scanned_at AS existing_scanned_at
     FROM attendees a
-    LEFT JOIN scan_logs sl
-      ON sl.attendee_id = a.id AND sl.sponsor_code = ${sponsorCode ?? ""}
+    LEFT JOIN LATERAL (
+      SELECT notes, scanned_at
+      FROM scan_logs sl
+      WHERE sl.attendee_id = a.id AND sl.sponsor_code = ${sponsorCode ?? ""}
+      ORDER BY sl.scanned_at DESC
+      LIMIT 1
+    ) latest ON true
     WHERE a.id = ${id}
   `;
   return rows[0] ?? null;
@@ -121,13 +126,23 @@ export async function deleteSponsorCode(code: string) {
 
 // ── Scan Logs ────────────────────────────────────────────────────────────────
 
+// Every call inserts a fresh row — re-scanning the same attendee logs an
+// additional touchpoint instead of overwriting the previous one.
 export async function logScan(sponsorCode: string, attendeeId: string, notes: string) {
   await sql`
     INSERT INTO scan_logs (sponsor_code, attendee_id, notes)
     VALUES (${sponsorCode}, ${attendeeId}, ${notes})
-    ON CONFLICT (sponsor_code, attendee_id)
-    DO UPDATE SET notes = EXCLUDED.notes, scanned_at = NOW()
   `;
+}
+
+// Edits an existing scan_logs row in place (used by the "tap to edit notes"
+// flow on /leads, as opposed to logScan's always-insert scan flow).
+export async function updateScanNotes(id: string, sponsorCode: string, notes: string) {
+  const { rowCount } = await sql`
+    UPDATE scan_logs SET notes = ${notes}
+    WHERE id = ${id} AND sponsor_code = ${sponsorCode}
+  `;
+  return rowCount > 0;
 }
 
 export async function getScansForCode(sponsorCode: string) {

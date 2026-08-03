@@ -22,15 +22,14 @@ CREATE TABLE sponsor_codes (
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Every scan a sponsor rep performs
+-- Every scan a sponsor rep performs. Re-scanning the same attendee inserts
+-- an additional row rather than updating the existing one.
 CREATE TABLE scan_logs (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   sponsor_code  VARCHAR(50) NOT NULL REFERENCES sponsor_codes(code),
   attendee_id   VARCHAR(8) NOT NULL REFERENCES attendees(id),
   notes         TEXT,
-  scanned_at    TIMESTAMPTZ DEFAULT NOW(),
-  -- prevent duplicate scans of same attendee by same sponsor
-  UNIQUE(sponsor_code, attendee_id)
+  scanned_at    TIMESTAMPTZ DEFAULT NOW()
 );
 
 -- Indexes for common queries

@@ -59,10 +59,10 @@ export default function LeadsPage() {
     if (!sponsor) return;
     setSaving(true);
     try {
-      const res = await fetch("/api/scan", {
-        method: "POST",
+      const res = await fetch(`/api/scan/${lead.id}`, {
+        method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ sponsorCode: sponsor.code, attendeeId: lead.attendee_id, notes: editNotes }),
+        body: JSON.stringify({ sponsorCode: sponsor.code, notes: editNotes }),
       });
       if (res.ok) {
         setLeads(prev => prev.map(l => l.id === lead.id ? { ...l, notes: editNotes } : l));
